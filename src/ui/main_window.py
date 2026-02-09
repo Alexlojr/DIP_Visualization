@@ -15,67 +15,9 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("PDI Visualization - Processamento Digital de Imagens")
         self.setMinimumSize(1200, 800)
         
-        self.setup_styles()
+
         self.setupUi()
 
-    def setup_styles(self):
-        # Modern Dark Theme Aesthetic
-        self.setStyleSheet("""
-            QMainWindow {
-                background-color: #1e1e1e;
-            }
-            QWidget {
-                color: #e0e0e0;
-                font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-            }
-            QGroupBox {
-                border: 1px solid #3d3d3d;
-                border-radius: 8px;
-                margin-top: 15px;
-                font-weight: bold;
-                padding-top: 10px;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                left: 10px;
-                padding: 0 3px;
-            }
-            QPushButton {
-                background-color: #3d3d3d;
-                border: none;
-                border-radius: 4px;
-                padding: 8px 16px;
-                font-weight: 500;
-            }
-            QPushButton:hover {
-                background-color: #4d4d4d;
-            }
-            QPushButton#primaryBtn {
-                background-color: #0078d4;
-                color: white;
-            }
-            QPushButton#primaryBtn:hover {
-                background-color: #1081da;
-            }
-            QFrame#imagePlaceholder {
-                background-color: #2d2d2d;
-                border: 2px dashed #3d3d3d;
-                border-radius: 4px;
-                
-            }
-            QFrame#graphPlaceholder {
-                background-color: #252525;
-                border: 1px solid #333333;
-                border-radius: 4px;
-            }
-            QSlider::handle:vertical {
-                background: #0078d4;
-                border: 1px solid #0078d4;
-                height: 18px;
-                margin: 0 -4px;
-                border-radius: 9px;
-            }
-        """)
 
     def setupUi(self):
         central_widget = QWidget()
