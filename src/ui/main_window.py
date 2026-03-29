@@ -1,351 +1,569 @@
 import sys
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QPushButton, QLabel, QFrame, QSlider, QScrollArea, QRadioButton,
-    QGroupBox, QSizePolicy, QFileDialog, QSpinBox
+    QPushButton, QLabel, QFrame, QScrollArea, QRadioButton,
+    QGroupBox, QFileDialog, QSpinBox, QButtonGroup, QSizePolicy,
+    QProgressBar,
 )
-from PySide6.QtCore import Qt, QSize
-from PySide6.QtGui import QPixmap, QIcon, QFont, QColor, QPalette
+from PySide6.QtCore import Qt, QRect
+from PySide6.QtGui import QPixmap, QPainter, QColor, QFont
+from src.ui.worker import FilterWorker
 from PIL import Image
 from PIL.ImageQt import ImageQt
 from pathlib import Path
 
-# Fix fallback image path
+
+class ImagePreview(QWidget):
+    """
+    Widget de preview de imagem que re-escala automaticamente ao redimensionar.
+    Armazena o QPixmap original e redesenha centralizado mantendo aspect ratio.
+    """
+
+    def __init__(self, placeholder: str = "", parent=None):
+        super().__init__(parent)
+        self._pixmap: QPixmap | None = None
+        self._placeholder = placeholder
+        self.setObjectName("imagePlaceholder")
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.setMinimumSize(300, 300)
+
+    def set_image(self, img: Image.Image | None):
+        if img is None:
+            self._pixmap = None
+        else:
+            self._pixmap = QPixmap.fromImage(ImageQt(img))
+        self.update()
+
+    def paintEvent(self, _event):
+        from PySide6.QtGui import QPen
+        painter = QPainter(self)
+
+        if self._pixmap is None:
+            # Borda tracejada quando sem imagem
+            pen = QPen(QColor("#4a4a6a"))
+            pen.setStyle(Qt.DashLine)
+            pen.setWidth(1)
+            painter.setPen(pen)
+            painter.setBrush(Qt.NoBrush)
+            painter.drawRect(self.rect().adjusted(1, 1, -1, -1))
+
+            font = QFont()
+            font.setPointSize(10)
+            painter.setFont(font)
+            painter.setPen(QColor("#4a4a6a"))
+            painter.drawText(self.rect(), Qt.AlignCenter, self._placeholder)
+        else:
+            scaled = self._pixmap.scaled(
+                self.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation
+            )
+            x = (self.width()  - scaled.width())  // 2
+            y = (self.height() - scaled.height()) // 2
+            painter.drawPixmap(x, y, scaled)
+
+            # Borda sólida sutil quando com imagem
+            pen = QPen(QColor("#333355"))
+            pen.setWidth(1)
+            painter.setPen(pen)
+            painter.setBrush(Qt.NoBrush)
+            painter.drawRect(self.rect().adjusted(0, 0, -1, -1))
+
+        painter.end()
+
 FALLBACK_IMAGE_PATH = Path(__file__).resolve().parent.parent / "Algorythm" / "test-image.jpg"
+
+# (label, min, max, default) — label=None desabilita o spinbox
+FILTER_PARAMS = {
+    "Binarização":               ("Limiar:",        0,    255,  127),
+    "Escala de Cinza":           (None,              0,    1,    0),
+    "Inverter Cores":            (None,              0,    1,    0),
+    "Equalização de Histograma": (None,              0,    1,    0),
+    "Quantização":               ("Níveis:",         2,    64,   8),
+    "Ajuste de Brilho":          ("Brilho:",        -255,  255,  30),
+    "Transformação Logarítmica": ("Constante c:",    1,    100,  45),
+    "Correção Gama":             ("Gama (÷10):",     1,    30,   10),
+    "Filtro de Média":           ("Kernel:",         3,    31,   3),
+    "Filtro Mediana":            ("Kernel:",         3,    31,   3),
+    "Filtro Gaussiano":          ("Kernel:",         3,    31,   5),
+    "Sobel":                     (None,              0,    1,    0),
+    "Laplaciano":                (None,              0,    1,    0),
+    "Prewitt":                   (None,              0,    1,    0),
+    "Aguçamento":                (None,              0,    1,    0),
+    # Transformações Geométricas
+    "Rotação 90° ↻":            (None,              0,    1,    0),
+    "Rotação 90° ↺":            (None,              0,    1,    0),
+    "Rotação 180°":             (None,              0,    1,    0),
+    "Rotação Livre":            ("Ângulo (°):",      0,    359,  45),
+    "Espelhar Horizontal":      (None,              0,    1,    0),
+    "Espelhar Vertical":        (None,              0,    1,    0),
+    "Upscale":                  ("Fator (×):",       2,    8,    2),
+}
+
+
+class HistogramWidget(QWidget):
+    """Widget que desenha o histograma de uma imagem PIL."""
+
+    def __init__(self, title: str = "", parent=None):
+        super().__init__(parent)
+        self.title = title
+        self._channels: list[tuple[list[int], QColor]] = []
+        self.setMinimumHeight(160)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+
+    def set_image(self, image: Image.Image | None):
+        self._channels = []
+        if image is not None:
+            self._channels = self._compute_channels(image)
+        self.update()
+
+    @staticmethod
+    def _compute_channels(image: Image.Image):
+        # Pillow's histogram() is fast (C-level), no manual pixel iteration needed
+        mode = image.mode
+        if mode not in ("RGB", "L"):
+            image = image.convert("RGB")
+            mode = "RGB"
+
+        hist = image.histogram()
+
+        if mode == "L":
+            return [(hist[:256], QColor(200, 200, 200, 210))]
+
+        return [
+            (hist[0:256],   QColor(220, 70,  70,  170)),   # R
+            (hist[256:512], QColor(70,  200, 70,  170)),   # G
+            (hist[512:768], QColor(70,  120, 220, 170)),   # B
+        ]
+
+    def paintEvent(self, _event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing, False)
+
+        bg = QColor("#1a1a2e")
+        painter.fillRect(self.rect(), bg)
+
+        title_h = 18
+        padding = 6
+        w = self.width() - padding * 2
+        h = self.height() - title_h - padding * 2
+
+        # Title
+        painter.setPen(QColor("#aaaacc"))
+        title_font = QFont()
+        title_font.setPointSize(8)
+        painter.setFont(title_font)
+        painter.drawText(QRect(0, 2, self.width(), title_h), Qt.AlignCenter, self.title)
+
+        if not self._channels:
+            painter.setPen(QColor("#555"))
+            painter.drawText(
+                QRect(padding, title_h, w, h), Qt.AlignCenter, "Sem imagem"
+            )
+            painter.end()
+            return
+
+        # Find global max for scaling (skip index 0 to avoid huge DC spike from padding)
+        global_max = max(
+            max(vals[1:]) for vals, _ in self._channels
+        ) or 1
+
+        bar_w = max(1.0, w / 256)
+        top = title_h + padding
+
+        painter.setCompositionMode(QPainter.CompositionMode_Plus)
+
+        for vals, color in self._channels:
+            painter.setBrush(color)
+            painter.setPen(Qt.NoPen)
+            for i, v in enumerate(vals):
+                bar_h = int(v / global_max * h)
+                if bar_h > 0:
+                    x = padding + int(i * bar_w)
+                    painter.drawRect(x, top + h - bar_h, max(1, int(bar_w)), bar_h)
+
+        # Subtle border
+        painter.setCompositionMode(QPainter.CompositionMode_SourceOver)
+        painter.setPen(QColor("#333355"))
+        painter.setBrush(Qt.NoBrush)
+        painter.drawRect(padding, top, w, h)
+
+        painter.end()
 
 
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("PDI Visualization - Processamento Digital de Imagens")
-        self.setMinimumSize(1200, 800)
+        self.setWindowTitle("PDI Visualization — Processamento Digital de Imagens")
+        self.setMinimumSize(1440, 860)
 
-        self.current_image = None
-        self.processed_image = None
+        self.current_image: Image.Image | None = None
+        self.processed_image: Image.Image | None = None
+        self._worker: FilterWorker | None = None
 
-        self.setupUi()
+        self._setup_ui()
+        self._setup_statusbar()
 
-    def setupUi(self):
-        central_widget = QWidget()
-        self.setCentralWidget(central_widget)
+    # ------------------------------------------------------------------
+    # UI Setup
+    # ------------------------------------------------------------------
 
-        main_layout = QHBoxLayout(central_widget)
-        main_layout.setContentsMargins(10, 10, 10, 10)
-        main_layout.setSpacing(15)
+    def _setup_ui(self):
+        central = QWidget()
+        self.setCentralWidget(central)
 
-        # --- LEFT PANEL: Controls & Info ---
-        left_panel = QVBoxLayout()
-        left_panel.setSpacing(15)
+        root = QHBoxLayout(central)
+        root.setContentsMargins(10, 10, 10, 10)
+        root.setSpacing(12)
 
+        root.addLayout(self._build_left_panel(), 2)
+        root.addLayout(self._build_center_panel(), 5)
+        root.addLayout(self._build_right_panel(), 2)
+
+    def _build_left_panel(self) -> QVBoxLayout:
+        layout = QVBoxLayout()
+        layout.setSpacing(12)
+
+        # File
         file_group = QGroupBox("Arquivo")
-        file_layout = QVBoxLayout(file_group)
+        fl = QVBoxLayout(file_group)
         self.load_btn = QPushButton("Carregar Imagem")
         self.load_btn.setObjectName("primaryBtn")
-        self.load_btn.clicked.connect(self.load_image)  # <-- conectado aqui
+        self.load_btn.clicked.connect(self.load_image)
         self.save_btn = QPushButton("Salvar Resultado")
         self.save_btn.clicked.connect(self.save_image)
-        file_layout.addWidget(self.load_btn)
-        file_layout.addWidget(self.save_btn)
-        left_panel.addWidget(file_group)
+        fl.addWidget(self.load_btn)
+        fl.addWidget(self.save_btn)
+        layout.addWidget(file_group)
 
-        info_group = QGroupBox("Informações")
-        info_layout = QVBoxLayout(info_group)
-        self.lbl_resolution = QLabel("Resolução: N/A")
-        self.lbl_channels = QLabel("Canais: N/A")
-        self.lbl_format = QLabel("Formato: N/A")
-        info_layout.addWidget(self.lbl_resolution)
-        info_layout.addWidget(self.lbl_channels)
-        info_layout.addWidget(self.lbl_format)
-        left_panel.addWidget(info_group)
+        # Info
+        info_group = QGroupBox("Informações da Imagem")
+        il = QVBoxLayout(info_group)
+        self.lbl_resolution = QLabel("Resolução: —")
+        self.lbl_channels   = QLabel("Modo: —")
+        self.lbl_format     = QLabel("Formato: —")
+        for lbl in (self.lbl_resolution, self.lbl_channels, self.lbl_format):
+            lbl.setWordWrap(True)
+            il.addWidget(lbl)
+        layout.addWidget(info_group)
 
-        left_panel.addStretch()
-        main_layout.addLayout(left_panel, 1)
-
-        # --- CENTER PANEL: Images & Histograms ---
-        center_panel = QVBoxLayout()
-        center_panel.setSpacing(10)
-
-        # Top Area: Images
-        images_layout = QHBoxLayout()
-
-        # Original Image Container
-        orig_container = QVBoxLayout()
-        orig_container.addWidget(QLabel("Imagem Original", alignment=Qt.AlignCenter))
-        self.orig_preview = QFrame()
-        self.orig_preview.setObjectName("imagePlaceholder")
-        self.orig_preview.setMinimumSize(400, 400)
-        orig_container.setContentsMargins(0, 0, 0, 80)
-        self.orig_preview_label = QLabel("Original", self.orig_preview)
-        self.orig_preview_label.setAlignment(Qt.AlignCenter)
-
-        orig_container.addWidget(self.orig_preview)
-        images_layout.addLayout(orig_container)
-
-        # Processed Image Container
-        proc_container = QVBoxLayout()
-        proc_container.addWidget(QLabel("Imagem Alterada", alignment=Qt.AlignCenter))
-        self.proc_preview = QFrame()
-        self.proc_preview.setObjectName("imagePlaceholder")
-        self.proc_preview.setMinimumSize(400, 400)
-        proc_container.setContentsMargins(0, 0, 0, 80)
-        self.proc_preview_label = QLabel("Alterada", self.proc_preview)
-        self.proc_preview_label.setAlignment(Qt.AlignCenter)
-        proc_container.addWidget(self.proc_preview)
-        images_layout.addLayout(proc_container)
-
-        center_panel.addLayout(images_layout)
-
-        # Parameter Input Middle
-        param_layout = QVBoxLayout()
-        param_layout.addWidget(QLabel("Parâmetro:"))
+        # Parameter
+        param_group = QGroupBox("Parâmetro")
+        pl = QVBoxLayout(param_group)
+        self.param_label = QLabel("—")
+        self.param_label.setAlignment(Qt.AlignCenter)
         self.param_input = QSpinBox()
-        self.param_input.setRange(0, 255)  # Keep the range 0-255 allowing thresholds up to 255
-        self.param_input.setValue(3)  # Better default to prevent accidental billion operations on average spatial filters
-        self.param_input.valueChanged.connect(self.update_parameter)
-        param_layout.addWidget(self.param_input)
-        param_layout.addStretch()
-        images_layout.addLayout(param_layout)
+        self.param_input.setRange(0, 255)
+        self.param_input.setValue(3)
+        self.param_input.setEnabled(False)
+        self.param_input.valueChanged.connect(self._on_param_changed)
+        pl.addWidget(self.param_label)
+        pl.addWidget(self.param_input)
+        layout.addWidget(param_group)
 
-        # Bottom Area: Histograms
-        hist_layout = QHBoxLayout()
+        layout.addStretch()
+        return layout
 
-        self.orig_hist = QFrame()
-        self.orig_hist.setObjectName("graphPlaceholder")
-        self.orig_hist.setMinimumHeight(200)
-        self.orig_hist_label = QLabel("Histograma Original", self.orig_hist)
-        self.orig_hist_label.setAlignment(Qt.AlignCenter)
-        hist_layout.addWidget(self.orig_hist)
+    def _build_center_panel(self) -> QVBoxLayout:
+        layout = QVBoxLayout()
+        layout.setSpacing(8)
 
-        self.proc_hist = QFrame()
-        self.proc_hist.setObjectName("graphPlaceholder")
-        self.proc_hist.setMinimumHeight(200)
-        self.proc_hist_label = QLabel("Histograma Alterado", self.proc_hist)
-        self.proc_hist_label.setAlignment(Qt.AlignCenter)
-        hist_layout.addWidget(self.proc_hist)
+        # Image previews
+        images_row = QHBoxLayout()
+        images_row.setSpacing(10)
 
-        center_panel.addLayout(hist_layout)
+        for attr, title in (("orig_preview", "Imagem Original"),
+                             ("proc_preview", "Imagem Alterada")):
+            col = QVBoxLayout()
+            col.setSpacing(4)
+            header = QLabel(title)
+            header.setAlignment(Qt.AlignCenter)
+            header.setStyleSheet("font-weight: bold; font-size: 11px; color: #aaa;")
+            col.addWidget(header)
 
-        main_layout.addLayout(center_panel, 4)
+            preview = ImagePreview(title)
+            col.addWidget(preview)
+            setattr(self, attr, preview)
 
-        # --- RIGHT PANEL: Filters ---
-        right_panel = QVBoxLayout()
-        filters_group = QGroupBox("Filtros")
-        filters_layout = QVBoxLayout(filters_group)
+            images_row.addLayout(col)
+
+        layout.addLayout(images_row, 3)
+
+        # Histograms
+        hist_row = QHBoxLayout()
+        hist_row.setSpacing(10)
+
+        self.orig_hist = HistogramWidget("Histograma — Original")
+        self.proc_hist = HistogramWidget("Histograma — Alterada")
+        hist_row.addWidget(self.orig_hist)
+        hist_row.addWidget(self.proc_hist)
+
+        layout.addLayout(hist_row, 1)
+        return layout
+
+    def _build_right_panel(self) -> QVBoxLayout:
+        layout = QVBoxLayout()
+
+        outer = QGroupBox("Filtros")
+        outer_layout = QVBoxLayout(outer)
 
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.NoFrame)
-        scroll_content = QWidget()
-        scroll_layout = QVBoxLayout(scroll_content)
 
-        # Operations (Point)
-        lbl_ops = QLabel("<b>Operações Pontuais</b>")
-        scroll_layout.addWidget(lbl_ops)
-        
-        point_ops = [
-            ("Binarização", False),
-            ("Escala de Cinza", False),
-            ("Equalização", False),
-            ("Quantização", False),
-            ("Inverter Cores", False)
+        content = QWidget()
+        cl = QVBoxLayout(content)
+        cl.setSpacing(8)
+
+        # QButtonGroup garante exclusividade entre todos os grupos visuais
+        self._btn_group = QButtonGroup(self)
+        self._btn_group.setExclusive(True)
+        self._btn_group.buttonClicked.connect(self._on_filter_selected)
+
+        sections = [
+            ("Operações Pontuais", [
+                "Binarização",
+                "Escala de Cinza",
+                "Inverter Cores",
+                "Equalização de Histograma",
+                "Quantização",
+                "Ajuste de Brilho",
+                "Transformação Logarítmica",
+                "Correção Gama",
+            ]),
+            ("Filtros Passa Baixa", [
+                "Filtro de Média",
+                "Filtro Mediana",
+                "Filtro Gaussiano",
+            ]),
+            ("Filtros Passa Alta", [
+                "Sobel",
+                "Laplaciano",
+                "Prewitt",
+                "Aguçamento",
+            ]),
+            ("Transformações Geométricas", [
+                "Rotação 90° ↻",
+                "Rotação 90° ↺",
+                "Rotação 180°",
+                "Rotação Livre",
+                "Espelhar Horizontal",
+                "Espelhar Vertical",
+                "Upscale",
+            ]),
         ]
 
-        self.radio_buttons = []
-        for op_name, checked in point_ops:
-            rb = QRadioButton(op_name)
-            if checked: rb.setChecked(True)
-            rb.toggled.connect(self.apply_filter)
-            scroll_layout.addWidget(rb)
-            self.radio_buttons.append(rb)
-            
-        scroll_layout.addSpacing(15)
+        for section_title, filters in sections:
+            group = QGroupBox(section_title)
+            gl = QVBoxLayout(group)
+            gl.setSpacing(3)
+            for name in filters:
+                rb = QRadioButton(name)
+                self._btn_group.addButton(rb)
+                gl.addWidget(rb)
+            cl.addWidget(group)
 
-        # Filters (Spatial)
-        lbl_filters = QLabel("<b>Filtros (Espaciais)</b>")
-        scroll_layout.addWidget(lbl_filters)
-        
-        spatial_filters = [
-            ("Filtro de Média", False),
-            ("Filtro Mediana", False),
-            ("Sobel (Bordas)", False),
-            ("Laplaciano", False)
-        ]
+        cl.addStretch()
+        scroll.setWidget(content)
+        outer_layout.addWidget(scroll)
+        layout.addWidget(outer)
+        return layout
 
-        for filter_name, checked in spatial_filters:
-            rb = QRadioButton(filter_name)
-            if checked: rb.setChecked(True)
-            rb.toggled.connect(self.apply_filter)
-            scroll_layout.addWidget(rb)
-            self.radio_buttons.append(rb)
+    def _setup_statusbar(self):
+        self._status_lbl = QLabel("Pronto")
+        self._prog_bar = QProgressBar()
+        self._prog_bar.setMaximumWidth(200)
+        self._prog_bar.setTextVisible(False)
+        self._prog_bar.setVisible(False)
+        self.statusBar().addWidget(self._status_lbl, 1)
+        self.statusBar().addPermanentWidget(self._prog_bar)
 
-        scroll_layout.addStretch()
-        scroll.setWidget(scroll_content)
-        filters_layout.addWidget(scroll)
+    # ------------------------------------------------------------------
+    # Actions
+    # ------------------------------------------------------------------
 
-        right_panel.addWidget(filters_group)
-        main_layout.addLayout(right_panel, 1)
-
-    def load_image(self):  # <-- agora é metodo da classe, não função aninhada
-        caminho, _ = QFileDialog.getOpenFileName(
-            self,
-            "Escolha uma imagem",
-            "",
-            "Imagens (*.png *.jpg *.jpeg *.bmp *.gif)"
+    def load_image(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Escolha uma imagem", "",
+            "Imagens (*.png *.jpg *.jpeg *.bmp *.gif *.tiff *.webp)"
         )
-
-        if not caminho:
-            caminho = str(FALLBACK_IMAGE_PATH)
+        if not path:
+            path = str(FALLBACK_IMAGE_PATH)
 
         try:
-            img = Image.open(caminho)
+            img = Image.open(path)
         except Exception as e:
-            print(f"Error loading image: {e}. Falling back to default image.")
+            print(f"Erro ao carregar imagem: {e}. Usando imagem padrão.")
             try:
                 img = Image.open(str(FALLBACK_IMAGE_PATH))
-            except Exception as inner_e:
-                print(f"Failed to load fallback image: {inner_e}")
+            except Exception as e2:
+                print(f"Falha ao carregar imagem padrão: {e2}")
                 return
-                
-        img_qt = ImageQt(img)
-        pixmap = QPixmap.fromImage(img_qt)
 
-        scaled = pixmap.scaled(
-            self.orig_preview.size(),
-            Qt.KeepAspectRatio,
-            Qt.SmoothTransformation
-        )
-        self.orig_preview_label.setPixmap(scaled)
-        self.orig_preview_label.resize(self.orig_preview.size())
-        self.orig_preview_label.setText("")
-
-        self.proc_preview_label.setPixmap(scaled)
-        self.proc_preview_label.resize(self.proc_preview.size())
-        self.proc_preview_label.setText("")
-        
-        self.current_image = img
-        self.processed_image = img.copy()
-
-        width, height = img.size
-        self.lbl_resolution.setText(f"Resolução: {width}x{height}")
-        self.lbl_channels.setText(f"Canais: {img.mode}")
-        if hasattr(img, 'format') and img.format:
-            self.lbl_format.setText(f"Formato: {img.format}")
-        else:
-            self.lbl_format.setText("Formato: N/A")
+        self._set_original(img)
 
     def save_image(self):
         if self.processed_image is None:
             return
-            
+
         from src.utils.paths import IMAGES_DIR
         import os
-        
         os.makedirs(IMAGES_DIR, exist_ok=True)
-        
-        file_path, _ = QFileDialog.getSaveFileName(
-            self,
-            "Salvar Imagem",
-            str(IMAGES_DIR),
-            "Images (*.png *.jpg *.jpeg *.bmp)"
+
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Salvar Imagem", str(IMAGES_DIR),
+            "PNG (*.png);;JPEG (*.jpg *.jpeg);;BMP (*.bmp)"
         )
-        
-        if file_path:
-            self.processed_image.save(file_path)
+        if path:
+            self.processed_image.save(path)
 
-    def apply_filter(self):
-        selected_filter = None
-        for rb in getattr(self, 'radio_buttons', []):
-            if rb.isChecked():
-                selected_filter = rb.text()
-                break
-        
-        if selected_filter:
-            # Dynamically adjust the default slider value based on the chosen filter
-            # We block signals so this doesn't recursively trigger apply_filter again
-            self.param_input.blockSignals(True)
-            if selected_filter == "Binarização" and self.param_input.value() < 10:
-                self.param_input.setValue(127)
-            elif selected_filter in ["Filtro de Média", "Filtro Mediana"] and self.param_input.value() > 50:
-                self.param_input.setValue(3)
-            self.param_input.blockSignals(False)
+    def _on_filter_selected(self, _btn):
+        self._apply_filter()
 
-            if self.current_image is None:
-                print("No image loaded. Loading fallback image.")
-                self.load_image_from_path(str(FALLBACK_IMAGE_PATH))
+    def _on_param_changed(self):
+        self._apply_filter()
 
-            if self.current_image is not None:
-                from src.Algorythm.point_operations import binarization, grayscale, invert_colors
-                from src.Algorythm.filters import mean_filter, median_filter
-                
-                if selected_filter == "Binarização":
-                    self.processed_image = binarization(self.current_image, self.param_input.value())
-                elif selected_filter == "Escala de Cinza":
-                    self.processed_image = grayscale(self.current_image)
-                elif selected_filter == "Inverter Cores":
-                    self.processed_image = invert_colors(self.current_image)
-                elif selected_filter == "Filtro de Média":
-                    # Certificar que o kernel_size é ímpar e pelo menos 3
-                    k_size = max(3, self.param_input.value() | 1)
-                    self.processed_image = mean_filter(self.current_image, kernel_size=k_size)
-                elif selected_filter == "Filtro Mediana":
-                    # Certificar que o kernel_size é ímpar e pelo menos 3
-                    k_size = max(3, self.param_input.value() | 1)
-                    self.processed_image = median_filter(self.current_image, kernel_size=k_size)
-                else:
-                    print(f"Filter {selected_filter} not yet implemented.")
-                    self.processed_image = self.current_image.copy()
-                    
-                # Update the processed preview UI
-                if self.processed_image:
-                    img_qt = ImageQt(self.processed_image)
-                    pixmap = QPixmap.fromImage(img_qt)
-                    scaled = pixmap.scaled(
-                        self.proc_preview.size(),
-                        Qt.KeepAspectRatio,
-                        Qt.SmoothTransformation
-                    )
-                    self.proc_preview_label.setPixmap(scaled)
-                    
-    def load_image_from_path(self, caminho):
-        try:
-            img = Image.open(caminho)
-        except Exception:
+    def _apply_filter(self):
+        checked = self._btn_group.checkedButton()
+        if checked is None:
             return
 
-        img_qt = ImageQt(img)
-        pixmap = QPixmap.fromImage(img_qt)
+        selected = checked.text()
 
-        scaled = pixmap.scaled(
-            self.orig_preview.size(),
-            Qt.KeepAspectRatio,
-            Qt.SmoothTransformation
+        # Atualiza o widget de parâmetro
+        cfg = FILTER_PARAMS.get(selected)
+        if cfg:
+            label_text, p_min, p_max, p_default = cfg
+            self.param_input.blockSignals(True)
+            self.param_input.setRange(p_min, p_max)
+            cur = self.param_input.value()
+            if cur < p_min or cur > p_max:
+                self.param_input.setValue(p_default)
+            self.param_input.blockSignals(False)
+
+            has_param = label_text is not None
+            self.param_label.setText(label_text if has_param else "—")
+            self.param_input.setEnabled(has_param)
+
+        if self.current_image is None:
+            self._load_from_path(str(FALLBACK_IMAGE_PATH))
+        if self.current_image is None:
+            return
+
+        # Cancela worker anterior sem bloquear a UI
+        if self._worker is not None and self._worker.isRunning():
+            self._worker.cancel()
+            self._worker.result_ready.disconnect()
+            self._worker.progress.disconnect()
+
+        fn, args, kwargs = self._build_filter_call(selected, self.param_input.value())
+
+        self._worker = FilterWorker(fn, args=args, kwargs=kwargs)
+        self._worker.progress.connect(self._on_progress)
+        self._worker.result_ready.connect(self._on_result)
+        self._worker.start()
+
+        total = self.current_image.width * self.current_image.height
+        self._status_lbl.setText(f"Processando {selected}…  0 / {total:,} px")
+        self._prog_bar.setMaximum(total)
+        self._prog_bar.setValue(0)
+        self._prog_bar.setVisible(True)
+
+    def _on_progress(self, done: int, total: int):
+        self._prog_bar.setValue(done)
+        checked = self._btn_group.checkedButton()
+        name = checked.text() if checked else "…"
+        self._status_lbl.setText(f"Processando {name}…  {done:,} / {total:,} px")
+
+    def _on_result(self, result):
+        self._prog_bar.setVisible(False)
+        if result is None:
+            self._status_lbl.setText("Erro durante o processamento.")
+            return
+
+        self.processed_image = result
+        self.proc_preview.set_image(result)
+        self.proc_hist.set_image(result)
+
+        total = result.width * result.height
+        self._status_lbl.setText(f"Concluído — {total:,} px processados")
+
+    def _build_filter_call(self, name: str, val: int):
+        """Retorna (fn, args, kwargs) para o FilterWorker executar."""
+        from src.Algorythm.point_operations import (
+            binarization, grayscale, invert_colors,
+            histogram_equalization, quantization,
+            brightness_adjust, log_transform, gamma_correction,
         )
-        self.orig_preview_label.setPixmap(scaled)
-        self.orig_preview_label.resize(self.orig_preview.size())
-        self.orig_preview_label.setText("")
+        from src.Algorythm.filters import (
+            mean_filter, median_filter, gaussian_filter,
+            sobel_filter, laplacian_filter, prewitt_filter, sharpen_filter,
+        )
+        from src.Algorythm.transformations import (
+            rotate_90cw, rotate_90ccw, rotate_180, rotate_free,
+            flip_horizontal, flip_vertical, upscale,
+        )
 
-        # Auto load in the processed preview as well
-        self.proc_preview_label.setPixmap(scaled)
-        self.proc_preview_label.resize(self.proc_preview.size())
-        self.proc_preview_label.setText("")
-        
+        img = self.current_image
+        odd_val = max(3, val | 1)
+
+        dispatch = {
+            "Binarização":               (binarization,          (img,), {"threshold": val}),
+            "Escala de Cinza":           (grayscale,             (img,), {}),
+            "Inverter Cores":            (invert_colors,         (img,), {}),
+            "Equalização de Histograma": (histogram_equalization,(img,), {}),
+            "Quantização":               (quantization,          (img,), {"levels": val}),
+            "Ajuste de Brilho":          (brightness_adjust,     (img,), {"value": val}),
+            "Transformação Logarítmica": (log_transform,         (img,), {"c": val}),
+            "Correção Gama":             (gamma_correction,      (img,), {"gamma": val / 10.0}),
+            "Filtro de Média":           (mean_filter,           (img,), {"kernel_size": odd_val}),
+            "Filtro Mediana":            (median_filter,         (img,), {"kernel_size": odd_val}),
+            "Filtro Gaussiano":          (gaussian_filter,       (img,), {"kernel_size": odd_val}),
+            "Sobel":                     (sobel_filter,          (img,), {}),
+            "Laplaciano":                (laplacian_filter,      (img,), {}),
+            "Prewitt":                   (prewitt_filter,        (img,), {}),
+            "Aguçamento":                (sharpen_filter,        (img,), {}),
+            "Rotação 90° ↻":            (rotate_90cw,           (img,), {}),
+            "Rotação 90° ↺":            (rotate_90ccw,          (img,), {}),
+            "Rotação 180°":             (rotate_180,            (img,), {}),
+            "Rotação Livre":            (rotate_free,           (img,), {"angle": val}),
+            "Espelhar Horizontal":      (flip_horizontal,       (img,), {}),
+            "Espelhar Vertical":        (flip_vertical,         (img,), {}),
+            "Upscale":                  (upscale,               (img,), {"factor": val}),
+        }
+
+        entry = dispatch.get(name)
+        if entry is None:
+            print(f"Filtro '{name}' não implementado.")
+            return (lambda **kw: img.copy()), (), {}
+
+        return entry
+
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
+
+    def _set_original(self, img: Image.Image):
         self.current_image = img
         self.processed_image = img.copy()
 
-        width, height = img.size
-        self.lbl_resolution.setText(f"Resolução: {width}x{height}")
-        self.lbl_channels.setText(f"Canais: {img.mode}")
-        if hasattr(img, 'format') and img.format:
-            self.lbl_format.setText(f"Formato: {img.format}")
-        else:
-            self.lbl_format.setText("Formato: N/A")
+        self.orig_preview.set_image(img)
+        self.proc_preview.set_image(img)
 
-    def update_parameter(self, value):
-        print(f"Parameter updated to: {value}")
-        self.apply_filter()  # Will re-apply the current filter with new parameter
+        self.orig_hist.set_image(img)
+        self.proc_hist.set_image(img)
+
+        w, h = img.size
+        self.lbl_resolution.setText(f"Resolução: {w} × {h} px")
+        self.lbl_channels.setText(f"Modo: {img.mode}")
+        self.lbl_format.setText(f"Formato: {img.format or 'N/A'}")
+
+    def _load_from_path(self, path: str):
+        try:
+            self._set_original(Image.open(path))
+        except Exception as e:
+            print(f"Falha ao carregar: {e}")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     app = QApplication(sys.argv)
     window = MainWindow()
     window.show()
