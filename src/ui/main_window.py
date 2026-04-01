@@ -69,7 +69,7 @@ class ImagePreview(QWidget):
 
         painter.end()
 
-FALLBACK_IMAGE_PATH = Path(__file__).resolve().parent.parent / "Algorythm" / "test-image.jpg"
+FALLBACK_IMAGE_PATH = Path(__file__).resolve().parent.parent / "images" / "test-image.png"
 
 # (label, min, max, default) — label=None desabilita o spinbox
 FILTER_PARAMS = {
@@ -84,6 +84,8 @@ FILTER_PARAMS = {
     "Filtro de Média":           ("Kernel:",         3,    31,   3),
     "Filtro Mediana":            ("Kernel:",         3,    31,   3),
     "Filtro Gaussiano":          ("Kernel:",         3,    31,   5),
+    "Filtro de Moda":           ("Kernel:",         3,    31,   5),
+    "Kuwahara":                 ("Kernel:",         3,    31,   5),
     "Sobel":                     (None,              0,    1,    0),
     "Laplaciano":                (None,              0,    1,    0),
     "Prewitt":                   (None,              0,    1,    0),
@@ -92,10 +94,18 @@ FILTER_PARAMS = {
     "Rotação 90° ↻":            (None,              0,    1,    0),
     "Rotação 90° ↺":            (None,              0,    1,    0),
     "Rotação 180°":             (None,              0,    1,    0),
-    "Rotação Livre":            ("Ângulo (°):",      0,    359,  45),
-    "Espelhar Horizontal":      (None,              0,    1,    0),
+"Espelhar Horizontal":      (None,              0,    1,    0),
     "Espelhar Vertical":        (None,              0,    1,    0),
     "Upscale":                  ("Fator (×):",       2,    8,    2),
+    "Downscale (Pixelação)":    ("Fator (×):",       2,    32,   4),
+    "Arte ASCII":               ("Bloco (px):",      4,    32,   8),
+    "Mapa Térmico":            (None,               0,    1,    0),
+    "Glitch":                  ("Intensidade:",      1,    30,   8),
+    "Dithering":               ("Níveis:",           2,    16,   2),
+    "Aberração Cromática":     ("Força:",            1,    20,   5),
+    "Distorção Barril":        ("Força:",            1,    50,   15),
+    "Ondulação":               ("Amplitude:",        1,    40,   10),
+    "Vidro Fosco":             ("Raio:",             1,    20,   5),
 }
 
 
@@ -333,6 +343,8 @@ class MainWindow(QMainWindow):
                 "Filtro de Média",
                 "Filtro Mediana",
                 "Filtro Gaussiano",
+                "Filtro de Moda",
+                "Kuwahara",
             ]),
             ("Filtros Passa Alta", [
                 "Sobel",
@@ -344,10 +356,22 @@ class MainWindow(QMainWindow):
                 "Rotação 90° ↻",
                 "Rotação 90° ↺",
                 "Rotação 180°",
-                "Rotação Livre",
                 "Espelhar Horizontal",
                 "Espelhar Vertical",
                 "Upscale",
+                "Downscale (Pixelação)",
+            ]),
+            ("Efeitos Especiais", [
+                "Arte ASCII",
+                "Mapa Térmico",
+                "Glitch",
+                "Dithering",
+            ]),
+            ("Distorções de Câmera/Vidro", [
+                "Aberração Cromática",
+                "Distorção Barril",
+                "Ondulação",
+                "Vidro Fosco",
             ]),
         ]
 
@@ -484,7 +508,13 @@ class MainWindow(QMainWindow):
         self.proc_hist.set_image(result)
 
         total = result.width * result.height
-        self._status_lbl.setText(f"Concluído — {total:,} px processados")
+        if self.current_image and result.size != self.current_image.size:
+            ow, oh = self.current_image.size
+            self._status_lbl.setText(
+                f"Concluído — {ow}×{oh} → {result.width}×{result.height} ({total:,} px)"
+            )
+        else:
+            self._status_lbl.setText(f"Concluído — {total:,} px processados")
 
     def _build_filter_call(self, name: str, val: int):
         """Retorna (fn, args, kwargs) para o FilterWorker executar."""
@@ -496,10 +526,14 @@ class MainWindow(QMainWindow):
         from src.Algorythm.filters import (
             mean_filter, median_filter, gaussian_filter,
             sobel_filter, laplacian_filter, prewitt_filter, sharpen_filter,
+            mode_filter, kuwahara_filter,
         )
         from src.Algorythm.transformations import (
-            rotate_90cw, rotate_90ccw, rotate_180, rotate_free,
-            flip_horizontal, flip_vertical, upscale,
+            rotate_90cw, rotate_90ccw, rotate_180,
+            flip_horizontal, flip_vertical, upscale, downscale,
+            ascii_art_filter, heatmap_filter, glitch_filter,
+            dither_floyd_steinberg, chromatic_aberration,
+            barrel_distortion, ripple_filter, frosted_glass_filter,
         )
 
         img = self.current_image
@@ -517,6 +551,8 @@ class MainWindow(QMainWindow):
             "Filtro de Média":           (mean_filter,           (img,), {"kernel_size": odd_val}),
             "Filtro Mediana":            (median_filter,         (img,), {"kernel_size": odd_val}),
             "Filtro Gaussiano":          (gaussian_filter,       (img,), {"kernel_size": odd_val}),
+            "Filtro de Moda":           (mode_filter,           (img,), {"kernel_size": odd_val}),
+            "Kuwahara":                 (kuwahara_filter,       (img,), {"kernel_size": odd_val}),
             "Sobel":                     (sobel_filter,          (img,), {}),
             "Laplaciano":                (laplacian_filter,      (img,), {}),
             "Prewitt":                   (prewitt_filter,        (img,), {}),
@@ -524,10 +560,18 @@ class MainWindow(QMainWindow):
             "Rotação 90° ↻":            (rotate_90cw,           (img,), {}),
             "Rotação 90° ↺":            (rotate_90ccw,          (img,), {}),
             "Rotação 180°":             (rotate_180,            (img,), {}),
-            "Rotação Livre":            (rotate_free,           (img,), {"angle": val}),
             "Espelhar Horizontal":      (flip_horizontal,       (img,), {}),
             "Espelhar Vertical":        (flip_vertical,         (img,), {}),
             "Upscale":                  (upscale,               (img,), {"factor": val}),
+            "Downscale (Pixelação)":    (downscale,             (img,), {"factor": val}),
+            "Arte ASCII":               (ascii_art_filter,      (img,), {"block_size": val}),
+            "Mapa Térmico":            (heatmap_filter,        (img,), {}),
+            "Glitch":                  (glitch_filter,         (img,), {"intensity": val}),
+            "Dithering":               (dither_floyd_steinberg,(img,), {"levels": val}),
+            "Aberração Cromática":     (chromatic_aberration,  (img,), {"strength": val}),
+            "Distorção Barril":        (barrel_distortion,     (img,), {"strength": val}),
+            "Ondulação":               (ripple_filter,         (img,), {"amplitude": val}),
+            "Vidro Fosco":             (frosted_glass_filter,  (img,), {"radius": val}),
         }
 
         entry = dispatch.get(name)
