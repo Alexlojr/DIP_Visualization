@@ -1,6 +1,6 @@
-# PDI Visualization
+# DIP Visualization
 
-A desktop application for studying and visualizing **Digital Image Processing (PDI)** techniques, built with Python and PySide6.
+A desktop application for studying and visualizing **Digital Image Processing (DIP)** techniques, built with Python and PySide6.
 
 ![Python](https://img.shields.io/badge/Python-3.13+-3776AB?logo=python&logoColor=white)
 ![PySide6](https://img.shields.io/badge/PySide6-6.10-41CD52?logo=qt&logoColor=white)
@@ -24,16 +24,19 @@ A desktop application for studying and visualizing **Digital Image Processing (P
 | Invert Colors | Image negative |
 | Histogram Equalization | Redistributes intensity levels to improve contrast |
 | Quantization | Reduces the number of color levels |
-| Brightness Adjust | Adds a constant offset to each channel |
-| Logarithmic Transform | Enhances detail in dark regions |
+| Brightness Adjustment | Adds a constant offset to each channel |
+| Log Transform | Enhances detail in dark regions |
 | Gamma Correction | Power-law curve (γ < 1 brightens, γ > 1 darkens) |
+| BW Mask | Applies `src/images/bw.png`: white keeps original pixels, black outputs black |
 
 ### Low-Pass Filters
 | Filter | Description |
 |---|---|
-| Mean | Smoothing by neighborhood average |
-| Median | Salt-and-pepper noise removal |
-| Gaussian | Weighted smoothing with a Gaussian kernel |
+| Mean Filter | Smoothing by neighborhood average |
+| Median Filter | Salt-and-pepper noise removal |
+| Gaussian Filter | Weighted smoothing with a Gaussian kernel |
+| Mode Filter | Replaces each neighborhood with its modal value |
+| Kuwahara | Edge-preserving smoothing by regional variance selection |
 
 ### High-Pass Filters
 | Filter | Description |
@@ -41,16 +44,35 @@ A desktop application for studying and visualizing **Digital Image Processing (P
 | Sobel | Edge detection via X/Y gradients |
 | Laplacian | Edge enhancement using the second derivative |
 | Prewitt | Edge detection with uniform weights |
-| Sharpening | Laplacian-based detail enhancement kernel |
+| Sharpen | Laplacian-based detail enhancement kernel |
 
 ### Geometric Transformations
 | Transformation | Description |
 |---|---|
-| Rotate 90° CW / CCW | Fixed rotations *(placeholder)* |
-| Rotate 180° | *(placeholder)* |
-| Free Rotation | Adjustable angle *(placeholder)* |
-| Flip Horizontal / Vertical | *(placeholder)* |
-| Upscale | Resolution upscaling with LANCZOS4 + Unsharp Mask |
+| Rotate 90° CW | 90-degree clockwise rotation |
+| Rotate 90° CCW | 90-degree counter-clockwise rotation |
+| Rotate 180° | 180-degree rotation |
+| Flip Horizontal | Mirrors the image along the vertical axis |
+| Flip Vertical | Mirrors the image along the horizontal axis |
+| Upscale | OpenCV-based upscaling with LANCZOS4 + denoise + unsharp + CLAHE |
+| Downscale (Pixelation) | Degradation pipeline with blur, downsample, nearest upscale, and noise |
+
+### Special Effects
+| Effect | Description |
+|---|---|
+| ASCII Art | Converts the image into text-like block rendering |
+| Heatmap | Maps luminance values to a thermal color gradient |
+| Glitch | Simulates digital signal corruption artifacts |
+| Dithering | Floyd-Steinberg error diffusion quantization |
+| BW Mask | Applies grayscale mask composition from `src/images/bw.png` |
+
+### Lens / Glass Distortions
+| Effect | Description |
+|---|---|
+| Chromatic Aberration | Radial RGB channel separation with bilinear sampling |
+| Barrel Distortion | Fisheye-style radial distortion with bilinear sampling |
+| Ripple | Wave displacement using sinusoidal offsets |
+| Frosted Glass | Random local pixel scattering to simulate textured glass |
 
 ### UI & Architecture
 - **Live RGB histograms** for both original and processed images
@@ -120,8 +142,8 @@ PDI_Visualization/
 |---|---|---|
 | PySide6 | 6.10.2 | GUI framework (Qt6) |
 | Pillow | 12.1.0 | Image loading, saving, and processing |
-| opencv-python | 4.11.0.86 | High-quality upscaling |
-| numpy | 2.2.4 | Matrix operations for upscaling |
+| opencv-python | 4.11.0.86 | Geometric resampling and enhancement pipeline support |
+| numpy | 2.2.4 | Numeric arrays used by OpenCV-based operations |
 
 ---
 

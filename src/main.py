@@ -23,7 +23,7 @@ def load_qss(app: QApplication) -> None:
 
 def main() -> None:
     app = QApplication(sys.argv)
-    app.setApplicationName("PDI Visualizer")
+    app.setApplicationName("DIP Visualizer")
 
     load_qss(app)
 

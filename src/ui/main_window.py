@@ -203,7 +203,7 @@ class HistogramWidget(QWidget):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("PDI Visualization - Digital Image Processing")
+        self.setWindowTitle("DIP Visualization - Digital Image Processing")
         self.setMinimumSize(1440, 860)
 
         self.current_image: Image.Image | None = None
