@@ -15,8 +15,8 @@ from pathlib import Path
 
 class ImagePreview(QWidget):
     """
-    Widget de preview de imagem que re-escala automaticamente ao redimensionar.
-    Armazena o QPixmap original e redesenha centralizado mantendo aspect ratio.
+    Image preview widget that auto-scales on resize.
+    Stores the original QPixmap and redraws it centered with preserved aspect ratio.
     """
 
     def __init__(self, placeholder: str = "", parent=None):
@@ -39,7 +39,7 @@ class ImagePreview(QWidget):
         painter = QPainter(self)
 
         if self._pixmap is None:
-            # Borda tracejada quando sem imagem
+            # Dashed border when no image is loaded
             pen = QPen(QColor("#4a4a6a"))
             pen.setStyle(Qt.DashLine)
             pen.setWidth(1)
@@ -60,7 +60,7 @@ class ImagePreview(QWidget):
             y = (self.height() - scaled.height()) // 2
             painter.drawPixmap(x, y, scaled)
 
-            # Borda sólida sutil quando com imagem
+            # Subtle solid border when image is loaded
             pen = QPen(QColor("#333355"))
             pen.setWidth(1)
             painter.setPen(pen)
@@ -71,47 +71,47 @@ class ImagePreview(QWidget):
 
 FALLBACK_IMAGE_PATH = Path(__file__).resolve().parent.parent / "images" / "test-image.png"
 
-# (label, min, max, default) — label=None desabilita o spinbox
+# (label, min, max, default) - label=None disables the spinbox
 FILTER_PARAMS = {
-    "Binarização":               ("Limiar:",        0,    255,  127),
-    "Escala de Cinza":           (None,              0,    1,    0),
-    "Inverter Cores":            (None,              0,    1,    0),
-    "Equalização de Histograma": (None,              0,    1,    0),
-    "Quantização":               ("Níveis:",         2,    64,   8),
-    "Ajuste de Brilho":          ("Brilho:",        -255,  255,  30),
-    "Transformação Logarítmica": ("Constante c:",    1,    100,  45),
-    "Correção Gama":             ("Gama (÷10):",     1,    30,   10),
-    "Filtro de Média":           ("Kernel:",         3,    31,   3),
-    "Filtro Mediana":            ("Kernel:",         3,    31,   3),
-    "Filtro Gaussiano":          ("Kernel:",         3,    31,   5),
-    "Filtro de Moda":           ("Kernel:",         3,    31,   5),
-    "Kuwahara":                 ("Kernel:",         3,    31,   5),
+    "Binarization":              ("Threshold:",      0,    255,  127),
+    "Grayscale":                 (None,              0,    1,    0),
+    "Invert Colors":             (None,              0,    1,    0),
+    "Histogram Equalization":    (None,              0,    1,    0),
+    "Quantization":              ("Levels:",         2,    64,   8),
+    "Brightness Adjustment":     ("Brightness:",    -255,  255,  30),
+    "Log Transform":             ("Constant c:",     1,    100,  45),
+    "Gamma Correction":          ("Gamma (/10):",    1,    30,   10),
+    "Mean Filter":               ("Kernel:",         3,    31,   3),
+    "Median Filter":             ("Kernel:",         3,    31,   3),
+    "Gaussian Filter":           ("Kernel:",         3,    31,   5),
+    "Mode Filter":               ("Kernel:",         3,    31,   5),
+    "Kuwahara":                  ("Kernel:",         3,    31,   5),
     "Sobel":                     (None,              0,    1,    0),
-    "Laplaciano":                (None,              0,    1,    0),
+    "Laplacian":                 (None,              0,    1,    0),
     "Prewitt":                   (None,              0,    1,    0),
-    "Aguçamento":                (None,              0,    1,    0),
-    # Transformações Geométricas
-    "Rotação 90° ↻":            (None,              0,    1,    0),
-    "Rotação 90° ↺":            (None,              0,    1,    0),
-    "Rotação 180°":             (None,              0,    1,    0),
-"Espelhar Horizontal":      (None,              0,    1,    0),
-    "Espelhar Vertical":        (None,              0,    1,    0),
-    "Upscale":                  ("Fator (×):",       2,    8,    2),
-    "Downscale (Pixelação)":    ("Fator (×):",       2,    32,   4),
-    "Arte ASCII":               ("Bloco (px):",      4,    32,   8),
-    "Mapa Térmico":            (None,               0,    1,    0),
-    "Glitch":                  ("Intensidade:",      1,    30,   8),
-    "Dithering":               ("Níveis:",           2,    16,   2),
-    "Máscara BW":              (None,                0,    1,    0),
-    "Aberração Cromática":     ("Força:",            1,    20,   5),
-    "Distorção Barril":        ("Força:",            1,    50,   15),
-    "Ondulação":               ("Amplitude:",        1,    40,   10),
-    "Vidro Fosco":             ("Raio:",             1,    20,   5),
+    "Sharpen":                   (None,              0,    1,    0),
+    # Geometric transformations
+    "Rotate 90° CW":             (None,              0,    1,    0),
+    "Rotate 90° CCW":            (None,              0,    1,    0),
+    "Rotate 180°":               (None,              0,    1,    0),
+    "Flip Horizontal":           (None,              0,    1,    0),
+    "Flip Vertical":             (None,              0,    1,    0),
+    "Upscale":                   ("Factor (x):",     2,    8,    2),
+    "Downscale (Pixelation)":    ("Factor (x):",     2,    32,   4),
+    "ASCII Art":                 ("Block (px):",     4,    32,   8),
+    "Heatmap":                   (None,              0,    1,    0),
+    "Glitch":                    ("Intensity:",      1,    30,   8),
+    "Dithering":                 ("Levels:",         2,    16,   2),
+    "BW Mask":                   (None,              0,    1,    0),
+    "Chromatic Aberration":      ("Strength:",       1,    20,   5),
+    "Barrel Distortion":         ("Strength:",       1,    50,   15),
+    "Ripple":                    ("Amplitude:",      1,    40,   10),
+    "Frosted Glass":             ("Radius:",         1,    20,   5),
 }
 
 
 class HistogramWidget(QWidget):
-    """Widget que desenha o histograma de uma imagem PIL."""
+    """Widget that draws a PIL image histogram."""
 
     def __init__(self, title: str = "", parent=None):
         super().__init__(parent)
@@ -167,7 +167,7 @@ class HistogramWidget(QWidget):
         if not self._channels:
             painter.setPen(QColor("#555"))
             painter.drawText(
-                QRect(padding, title_h, w, h), Qt.AlignCenter, "Sem imagem"
+                QRect(padding, title_h, w, h), Qt.AlignCenter, "No image"
             )
             painter.end()
             return
@@ -203,7 +203,7 @@ class HistogramWidget(QWidget):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("PDI Visualization — Processamento Digital de Imagens")
+        self.setWindowTitle("PDI Visualization - Digital Image Processing")
         self.setMinimumSize(1440, 860)
 
         self.current_image: Image.Image | None = None
@@ -234,30 +234,30 @@ class MainWindow(QMainWindow):
         layout.setSpacing(12)
 
         # File
-        file_group = QGroupBox("Arquivo")
+        file_group = QGroupBox("File")
         fl = QVBoxLayout(file_group)
-        self.load_btn = QPushButton("Carregar Imagem")
+        self.load_btn = QPushButton("Load Image")
         self.load_btn.setObjectName("primaryBtn")
         self.load_btn.clicked.connect(self.load_image)
-        self.save_btn = QPushButton("Salvar Resultado")
+        self.save_btn = QPushButton("Save Result")
         self.save_btn.clicked.connect(self.save_image)
         fl.addWidget(self.load_btn)
         fl.addWidget(self.save_btn)
         layout.addWidget(file_group)
 
         # Info
-        info_group = QGroupBox("Informações da Imagem")
+        info_group = QGroupBox("Image Info")
         il = QVBoxLayout(info_group)
-        self.lbl_resolution = QLabel("Resolução: —")
-        self.lbl_channels   = QLabel("Modo: —")
-        self.lbl_format     = QLabel("Formato: —")
+        self.lbl_resolution = QLabel("Resolution: -")
+        self.lbl_channels   = QLabel("Mode: -")
+        self.lbl_format     = QLabel("Format: -")
         for lbl in (self.lbl_resolution, self.lbl_channels, self.lbl_format):
             lbl.setWordWrap(True)
             il.addWidget(lbl)
         layout.addWidget(info_group)
 
         # Parameter
-        param_group = QGroupBox("Parâmetro")
+        param_group = QGroupBox("Parameter")
         pl = QVBoxLayout(param_group)
         self.param_label = QLabel("—")
         self.param_label.setAlignment(Qt.AlignCenter)
@@ -281,8 +281,8 @@ class MainWindow(QMainWindow):
         images_row = QHBoxLayout()
         images_row.setSpacing(10)
 
-        for attr, title in (("orig_preview", "Imagem Original"),
-                             ("proc_preview", "Imagem Alterada")):
+        for attr, title in (("orig_preview", "Original Image"),
+                            ("proc_preview", "Processed Image")):
             col = QVBoxLayout()
             col.setSpacing(4)
             header = QLabel(title)
@@ -302,8 +302,8 @@ class MainWindow(QMainWindow):
         hist_row = QHBoxLayout()
         hist_row.setSpacing(10)
 
-        self.orig_hist = HistogramWidget("Histograma — Original")
-        self.proc_hist = HistogramWidget("Histograma — Alterada")
+        self.orig_hist = HistogramWidget("Histogram - Original")
+        self.proc_hist = HistogramWidget("Histogram - Processed")
         hist_row.addWidget(self.orig_hist)
         hist_row.addWidget(self.proc_hist)
 
@@ -313,7 +313,7 @@ class MainWindow(QMainWindow):
     def _build_right_panel(self) -> QVBoxLayout:
         layout = QVBoxLayout()
 
-        outer = QGroupBox("Filtros")
+        outer = QGroupBox("Filters")
         outer_layout = QVBoxLayout(outer)
 
         scroll = QScrollArea()
@@ -324,56 +324,56 @@ class MainWindow(QMainWindow):
         cl = QVBoxLayout(content)
         cl.setSpacing(8)
 
-        # QButtonGroup garante exclusividade entre todos os grupos visuais
+        # QButtonGroup enforces exclusivity across visual groups
         self._btn_group = QButtonGroup(self)
         self._btn_group.setExclusive(True)
         self._btn_group.buttonClicked.connect(self._on_filter_selected)
 
         sections = [
-            ("Operações Pontuais", [
-                "Binarização",
-                "Escala de Cinza",
-                "Inverter Cores",
-                "Equalização de Histograma",
-                "Quantização",
-                "Ajuste de Brilho",
-                "Transformação Logarítmica",
-                "Correção Gama",
+            ("Point Operations", [
+                "Binarization",
+                "Grayscale",
+                "Invert Colors",
+                "Histogram Equalization",
+                "Quantization",
+                "Brightness Adjustment",
+                "Log Transform",
+                "Gamma Correction",
             ]),
-            ("Filtros Passa Baixa", [
-                "Filtro de Média",
-                "Filtro Mediana",
-                "Filtro Gaussiano",
-                "Filtro de Moda",
+            ("Low-Pass Filters", [
+                "Mean Filter",
+                "Median Filter",
+                "Gaussian Filter",
+                "Mode Filter",
                 "Kuwahara",
             ]),
-            ("Filtros Passa Alta", [
+            ("High-Pass Filters", [
                 "Sobel",
-                "Laplaciano",
+                "Laplacian",
                 "Prewitt",
-                "Aguçamento",
+                "Sharpen",
             ]),
-            ("Transformações Geométricas", [
-                "Rotação 90° ↻",
-                "Rotação 90° ↺",
-                "Rotação 180°",
-                "Espelhar Horizontal",
-                "Espelhar Vertical",
+            ("Geometric Transformations", [
+                "Rotate 90° CW",
+                "Rotate 90° CCW",
+                "Rotate 180°",
+                "Flip Horizontal",
+                "Flip Vertical",
                 "Upscale",
-                "Downscale (Pixelação)",
+                "Downscale (Pixelation)",
             ]),
-            ("Efeitos Especiais", [
-                "Arte ASCII",
-                "Mapa Térmico",
+            ("Special Effects", [
+                "ASCII Art",
+                "Heatmap",
                 "Glitch",
                 "Dithering",
-                "Máscara BW",
+                "BW Mask",
             ]),
-            ("Distorções de Câmera/Vidro", [
-                "Aberração Cromática",
-                "Distorção Barril",
-                "Ondulação",
-                "Vidro Fosco",
+            ("Lens/Glass Distortions", [
+                "Chromatic Aberration",
+                "Barrel Distortion",
+                "Ripple",
+                "Frosted Glass",
             ]),
         ]
 
@@ -394,7 +394,7 @@ class MainWindow(QMainWindow):
         return layout
 
     def _setup_statusbar(self):
-        self._status_lbl = QLabel("Pronto")
+        self._status_lbl = QLabel("Ready")
         self._prog_bar = QProgressBar()
         self._prog_bar.setMaximumWidth(200)
         self._prog_bar.setTextVisible(False)
@@ -408,8 +408,8 @@ class MainWindow(QMainWindow):
 
     def load_image(self):
         path, _ = QFileDialog.getOpenFileName(
-            self, "Escolha uma imagem", "",
-            "Imagens (*.png *.jpg *.jpeg *.bmp *.gif *.tiff *.webp)"
+            self, "Choose an image", "",
+            "Images (*.png *.jpg *.jpeg *.bmp *.gif *.tiff *.webp)"
         )
         if not path:
             path = str(FALLBACK_IMAGE_PATH)
@@ -417,11 +417,11 @@ class MainWindow(QMainWindow):
         try:
             img = Image.open(path)
         except Exception as e:
-            print(f"Erro ao carregar imagem: {e}. Usando imagem padrão.")
+            print(f"Error loading image: {e}. Using fallback image.")
             try:
                 img = Image.open(str(FALLBACK_IMAGE_PATH))
             except Exception as e2:
-                print(f"Falha ao carregar imagem padrão: {e2}")
+                print(f"Failed to load fallback image: {e2}")
                 return
 
         self._set_original(img)
@@ -435,7 +435,7 @@ class MainWindow(QMainWindow):
         os.makedirs(IMAGES_DIR, exist_ok=True)
 
         path, _ = QFileDialog.getSaveFileName(
-            self, "Salvar Imagem", str(IMAGES_DIR),
+            self, "Save Image", str(IMAGES_DIR),
             "PNG (*.png);;JPEG (*.jpg *.jpeg);;BMP (*.bmp)"
         )
         if path:
@@ -454,7 +454,7 @@ class MainWindow(QMainWindow):
 
         selected = checked.text()
 
-        # Atualiza o widget de parâmetro
+        # Update parameter widget
         cfg = FILTER_PARAMS.get(selected)
         if cfg:
             label_text, p_min, p_max, p_default = cfg
@@ -474,7 +474,7 @@ class MainWindow(QMainWindow):
         if self.current_image is None:
             return
 
-        # Cancela worker anterior sem bloquear a UI
+        # Cancel previous worker without blocking the UI
         if self._worker is not None and self._worker.isRunning():
             self._worker.cancel()
             self._worker.result_ready.disconnect()
@@ -488,7 +488,7 @@ class MainWindow(QMainWindow):
         self._worker.start()
 
         total = self.current_image.width * self.current_image.height
-        self._status_lbl.setText(f"Processando {selected}…  0 / {total:,} px")
+        self._status_lbl.setText(f"Processing {selected}...  0 / {total:,} px")
         self._prog_bar.setMaximum(total)
         self._prog_bar.setValue(0)
         self._prog_bar.setVisible(True)
@@ -497,12 +497,12 @@ class MainWindow(QMainWindow):
         self._prog_bar.setValue(done)
         checked = self._btn_group.checkedButton()
         name = checked.text() if checked else "…"
-        self._status_lbl.setText(f"Processando {name}…  {done:,} / {total:,} px")
+        self._status_lbl.setText(f"Processing {name}...  {done:,} / {total:,} px")
 
     def _on_result(self, result):
         self._prog_bar.setVisible(False)
         if result is None:
-            self._status_lbl.setText("Erro durante o processamento.")
+            self._status_lbl.setText("Error during processing.")
             return
 
         self.processed_image = result
@@ -513,26 +513,26 @@ class MainWindow(QMainWindow):
         if self.current_image and result.size != self.current_image.size:
             ow, oh = self.current_image.size
             self._status_lbl.setText(
-                f"Concluído — {ow}×{oh} → {result.width}×{result.height} ({total:,} px)"
+                f"Done - {ow}x{oh} -> {result.width}x{result.height} ({total:,} px)"
             )
         else:
-            self._status_lbl.setText(f"Concluído — {total:,} px processados")
+            self._status_lbl.setText(f"Done - {total:,} px processed")
 
     def _build_filter_call(self, name: str, val: int):
-        """Retorna (fn, args, kwargs) para o FilterWorker executar."""
-        from src.Algorythm.point_operations import (
+        """Return (fn, args, kwargs) for FilterWorker execution."""
+        from src.Algorythms.point_operations import (
             binarization, grayscale, invert_colors,
             histogram_equalization, quantization,
             brightness_adjust, log_transform, gamma_correction,
             apply_bw_mask,
         )
         from src.utils.paths import IMAGES_DIR
-        from src.Algorythm.filters import (
+        from src.Algorythms.filters import (
             mean_filter, median_filter, gaussian_filter,
             sobel_filter, laplacian_filter, prewitt_filter, sharpen_filter,
             mode_filter, kuwahara_filter,
         )
-        from src.Algorythm.transformations import (
+        from src.Algorythms.transformations import (
             rotate_90cw, rotate_90ccw, rotate_180,
             flip_horizontal, flip_vertical, upscale, downscale,
             ascii_art_filter, heatmap_filter, glitch_filter,
@@ -544,44 +544,44 @@ class MainWindow(QMainWindow):
         odd_val = max(3, val | 1)
 
         dispatch = {
-            "Binarização":               (binarization,          (img,), {"threshold": val}),
-            "Escala de Cinza":           (grayscale,             (img,), {}),
-            "Inverter Cores":            (invert_colors,         (img,), {}),
-            "Equalização de Histograma": (histogram_equalization,(img,), {}),
-            "Quantização":               (quantization,          (img,), {"levels": val}),
-            "Ajuste de Brilho":          (brightness_adjust,     (img,), {"value": val}),
-            "Transformação Logarítmica": (log_transform,         (img,), {"c": val}),
-            "Correção Gama":             (gamma_correction,      (img,), {"gamma": val / 10.0}),
-            "Filtro de Média":           (mean_filter,           (img,), {"kernel_size": odd_val}),
-            "Filtro Mediana":            (median_filter,         (img,), {"kernel_size": odd_val}),
-            "Filtro Gaussiano":          (gaussian_filter,       (img,), {"kernel_size": odd_val}),
-            "Filtro de Moda":           (mode_filter,           (img,), {"kernel_size": odd_val}),
+            "Binarization":              (binarization,          (img,), {"threshold": val}),
+            "Grayscale":                 (grayscale,             (img,), {}),
+            "Invert Colors":             (invert_colors,         (img,), {}),
+            "Histogram Equalization":    (histogram_equalization,(img,), {}),
+            "Quantization":              (quantization,          (img,), {"levels": val}),
+            "Brightness Adjustment":     (brightness_adjust,     (img,), {"value": val}),
+            "Log Transform":             (log_transform,         (img,), {"c": val}),
+            "Gamma Correction":          (gamma_correction,      (img,), {"gamma": val / 10.0}),
+            "Mean Filter":               (mean_filter,           (img,), {"kernel_size": odd_val}),
+            "Median Filter":             (median_filter,         (img,), {"kernel_size": odd_val}),
+            "Gaussian Filter":           (gaussian_filter,       (img,), {"kernel_size": odd_val}),
+            "Mode Filter":               (mode_filter,           (img,), {"kernel_size": odd_val}),
             "Kuwahara":                 (kuwahara_filter,       (img,), {"kernel_size": odd_val}),
             "Sobel":                     (sobel_filter,          (img,), {}),
-            "Laplaciano":                (laplacian_filter,      (img,), {}),
+            "Laplacian":                 (laplacian_filter,      (img,), {}),
             "Prewitt":                   (prewitt_filter,        (img,), {}),
-            "Aguçamento":                (sharpen_filter,        (img,), {}),
-            "Rotação 90° ↻":            (rotate_90cw,           (img,), {}),
-            "Rotação 90° ↺":            (rotate_90ccw,          (img,), {}),
-            "Rotação 180°":             (rotate_180,            (img,), {}),
-            "Espelhar Horizontal":      (flip_horizontal,       (img,), {}),
-            "Espelhar Vertical":        (flip_vertical,         (img,), {}),
+            "Sharpen":                   (sharpen_filter,        (img,), {}),
+            "Rotate 90° CW":             (rotate_90cw,           (img,), {}),
+            "Rotate 90° CCW":            (rotate_90ccw,          (img,), {}),
+            "Rotate 180°":               (rotate_180,            (img,), {}),
+            "Flip Horizontal":           (flip_horizontal,       (img,), {}),
+            "Flip Vertical":             (flip_vertical,         (img,), {}),
             "Upscale":                  (upscale,               (img,), {"factor": val}),
-            "Downscale (Pixelação)":    (downscale,             (img,), {"factor": val}),
-            "Arte ASCII":               (ascii_art_filter,      (img,), {"block_size": val}),
-            "Mapa Térmico":            (heatmap_filter,        (img,), {}),
+            "Downscale (Pixelation)":    (downscale,             (img,), {"factor": val}),
+            "ASCII Art":                 (ascii_art_filter,      (img,), {"block_size": val}),
+            "Heatmap":                   (heatmap_filter,        (img,), {}),
             "Glitch":                  (glitch_filter,         (img,), {"intensity": val}),
             "Dithering":               (dither_floyd_steinberg,(img,), {"levels": val}),
-            "Máscara BW":              (apply_bw_mask,         (img,), {"mask_path": str(IMAGES_DIR / "bw.png")}),
-            "Aberração Cromática":     (chromatic_aberration,  (img,), {"strength": val}),
-            "Distorção Barril":        (barrel_distortion,     (img,), {"strength": val}),
-            "Ondulação":               (ripple_filter,         (img,), {"amplitude": val}),
-            "Vidro Fosco":             (frosted_glass_filter,  (img,), {"radius": val}),
+            "BW Mask":                   (apply_bw_mask,         (img,), {"mask_path": str(IMAGES_DIR / "bw.png")}),
+            "Chromatic Aberration":      (chromatic_aberration,  (img,), {"strength": val}),
+            "Barrel Distortion":         (barrel_distortion,     (img,), {"strength": val}),
+            "Ripple":                    (ripple_filter,         (img,), {"amplitude": val}),
+            "Frosted Glass":             (frosted_glass_filter,  (img,), {"radius": val}),
         }
 
         entry = dispatch.get(name)
         if entry is None:
-            print(f"Filtro '{name}' não implementado.")
+            print(f"Filter '{name}' is not implemented.")
             return (lambda **kw: img.copy()), (), {}
 
         return entry
@@ -601,15 +601,15 @@ class MainWindow(QMainWindow):
         self.proc_hist.set_image(img)
 
         w, h = img.size
-        self.lbl_resolution.setText(f"Resolução: {w} × {h} px")
-        self.lbl_channels.setText(f"Modo: {img.mode}")
-        self.lbl_format.setText(f"Formato: {img.format or 'N/A'}")
+        self.lbl_resolution.setText(f"Resolution: {w} x {h} px")
+        self.lbl_channels.setText(f"Mode: {img.mode}")
+        self.lbl_format.setText(f"Format: {img.format or 'N/A'}")
 
     def _load_from_path(self, path: str):
         try:
             self._set_original(Image.open(path))
         except Exception as e:
-            print(f"Falha ao carregar: {e}")
+            print(f"Failed to load: {e}")
 
 
 if __name__ == "__main__":

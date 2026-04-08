@@ -7,7 +7,7 @@ from src.utils.paths import IMAGES_DIR
 
 
 def binarization(image, threshold=127, on_progress=None):
-    """Binarização manual sem NumPy/OpenCV"""
+    """Manual binarization without NumPy/OpenCV."""
     if image is None: return None
 
     img = image.convert("RGB")
@@ -29,7 +29,7 @@ def binarization(image, threshold=127, on_progress=None):
 
 
 def grayscale(image, on_progress=None):
-    """Conversão para escala de cinza manual (luminância ITU-R BT.601)"""
+    """Manual grayscale conversion (ITU-R BT.601 luminance)."""
     if image is None: return None
 
     img = image.convert("RGB")
@@ -50,7 +50,7 @@ def grayscale(image, on_progress=None):
 
 
 def invert_colors(image, on_progress=None):
-    """Negativo da imagem (inversão de cores)"""
+    """Image negative (color inversion)."""
     if image is None: return None
 
     img = image.convert("RGB")
@@ -71,7 +71,7 @@ def invert_colors(image, on_progress=None):
 
 
 def histogram_equalization(image, on_progress=None):
-    """Equalização de histograma — melhora contraste redistribuindo intensidades"""
+    """Histogram equalization to improve contrast by redistributing intensities."""
     if image is None: return None
 
     img = image.convert("L")
@@ -108,7 +108,7 @@ def histogram_equalization(image, on_progress=None):
 
 
 def quantization(image, levels=8, on_progress=None):
-    """Quantização de cores — reduz número de níveis de intensidade"""
+    """Color quantization - reduces the number of intensity levels."""
     if image is None: return None
 
     levels = max(2, levels)
@@ -135,7 +135,7 @@ def quantization(image, levels=8, on_progress=None):
 
 
 def brightness_adjust(image, value=30, on_progress=None):
-    """Ajuste de brilho — soma/subtrai valor constante em cada canal"""
+    """Brightness adjustment - add/subtract a constant per channel."""
     if image is None: return None
 
     img = image.convert("RGB")
@@ -160,7 +160,7 @@ def brightness_adjust(image, value=30, on_progress=None):
 
 
 def log_transform(image, c=45, on_progress=None):
-    """Transformação logarítmica — realça detalhes em regiões escuras"""
+    """Log transform - enhances details in darker regions."""
     if image is None: return None
 
     img = image.convert("RGB")
@@ -185,7 +185,7 @@ def log_transform(image, c=45, on_progress=None):
 
 
 def gamma_correction(image, gamma=1.0, on_progress=None):
-    """Correção gama — ajusta brilho com curva de potência (γ<1 clareia, γ>1 escurece)"""
+    """Gamma correction using a power curve (gamma<1 brightens, gamma>1 darkens)."""
     if image is None: return None
     if gamma <= 0:
         gamma = 0.1
@@ -211,11 +211,11 @@ def gamma_correction(image, gamma=1.0, on_progress=None):
 
 def apply_bw_mask(image, mask_path=None, on_progress=None):
     """
-    Composição com máscara em tons de cinza: branco mantém o pixel da imagem;
-    preto substitui por preto sólido (valores intermediários: produto por m/255).
+    Grayscale mask composition: white keeps the original pixel;
+    black replaces it with solid black (intermediate values use m/255 scaling).
 
-    Implementação explícita: luminância da máscara (BT.601), redimensionamento
-    nearest-neighbor por aritmética inteira, blend pixel a pixel — sem composite/resize.
+    Explicit implementation: mask luminance (BT.601), integer nearest-neighbor
+    resizing, and per-pixel blending - no Image.composite/Image.resize.
     """
     if image is None:
         return None
@@ -224,7 +224,7 @@ def apply_bw_mask(image, mask_path=None, on_progress=None):
     try:
         mask_img = Image.open(path)
     except OSError as e:
-        print(f"Erro ao abrir máscara {path}: {e}")
+        print(f"Error opening mask {path}: {e}")
         return None
 
     base = image.convert("RGB")
@@ -235,7 +235,7 @@ def apply_bw_mask(image, mask_path=None, on_progress=None):
     mask_rgb = mask_img.convert("RGB")
     mw, mh = mask_rgb.size
     mp = mask_rgb.load()
-    # Máscara em cinza por luminância (mesmo peso que o restante do módulo)
+    # Grayscale mask via luminance (same weights used by this module)
     mask_vals = [0] * (mw * mh)
     i = 0
     for my in range(mh):
@@ -248,7 +248,7 @@ def apply_bw_mask(image, mask_path=None, on_progress=None):
     npix = new_img.load()
 
     for x in range(w):
-        # Nearest-neighbor: (x,y) na saída → índice na máscara mw×mh
+        # Nearest-neighbor: output (x, y) -> source index in mw x mh mask
         sx = (x * mw) // w if w else 0
         for y in range(h):
             sy = (y * mh) // h if h else 0

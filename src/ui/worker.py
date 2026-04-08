@@ -3,12 +3,12 @@ from PIL import Image
 
 
 class _Cancelled(Exception):
-    """Lançada dentro do on_progress para abortar o processamento."""
+    """Raised inside on_progress to abort processing."""
 
 
 class FilterWorker(QThread):
-    progress     = Signal(int, int)   # (pixels_feitos, pixels_total)
-    result_ready = Signal(object)     # PIL Image (ou None em caso de erro)
+    progress     = Signal(int, int)   # (pixels_done, pixels_total)
+    result_ready = Signal(object)     # PIL Image (or None on error)
 
     def __init__(self, fn, args=(), kwargs=None, parent=None):
         super().__init__(parent)
@@ -31,7 +31,7 @@ class FilterWorker(QThread):
         except _Cancelled:
             return
         except Exception as e:
-            print(f"[FilterWorker] Erro durante processamento: {e}")
+            print(f"[FilterWorker] Processing error: {e}")
             result = None
 
         if not self._cancelled:
