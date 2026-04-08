@@ -102,6 +102,7 @@ FILTER_PARAMS = {
     "Mapa Térmico":            (None,               0,    1,    0),
     "Glitch":                  ("Intensidade:",      1,    30,   8),
     "Dithering":               ("Níveis:",           2,    16,   2),
+    "Máscara BW":              (None,                0,    1,    0),
     "Aberração Cromática":     ("Força:",            1,    20,   5),
     "Distorção Barril":        ("Força:",            1,    50,   15),
     "Ondulação":               ("Amplitude:",        1,    40,   10),
@@ -366,6 +367,7 @@ class MainWindow(QMainWindow):
                 "Mapa Térmico",
                 "Glitch",
                 "Dithering",
+                "Máscara BW",
             ]),
             ("Distorções de Câmera/Vidro", [
                 "Aberração Cromática",
@@ -522,7 +524,9 @@ class MainWindow(QMainWindow):
             binarization, grayscale, invert_colors,
             histogram_equalization, quantization,
             brightness_adjust, log_transform, gamma_correction,
+            apply_bw_mask,
         )
+        from src.utils.paths import IMAGES_DIR
         from src.Algorythm.filters import (
             mean_filter, median_filter, gaussian_filter,
             sobel_filter, laplacian_filter, prewitt_filter, sharpen_filter,
@@ -568,6 +572,7 @@ class MainWindow(QMainWindow):
             "Mapa Térmico":            (heatmap_filter,        (img,), {}),
             "Glitch":                  (glitch_filter,         (img,), {"intensity": val}),
             "Dithering":               (dither_floyd_steinberg,(img,), {"levels": val}),
+            "Máscara BW":              (apply_bw_mask,         (img,), {"mask_path": str(IMAGES_DIR / "bw.png")}),
             "Aberração Cromática":     (chromatic_aberration,  (img,), {"strength": val}),
             "Distorção Barril":        (barrel_distortion,     (img,), {"strength": val}),
             "Ondulação":               (ripple_filter,         (img,), {"amplitude": val}),

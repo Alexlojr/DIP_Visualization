@@ -1,5 +1,9 @@
 import math
+from pathlib import Path
+
 from PIL import Image
+
+from src.utils.paths import IMAGES_DIR
 
 
 def binarization(image, threshold=127, on_progress=None):
@@ -203,3 +207,31 @@ def gamma_correction(image, gamma=1.0, on_progress=None):
             on_progress((x + 1) * height, total)
 
     return new_img
+
+
+def apply_bw_mask(image, mask_path=None, on_progress=None):
+    """
+    Composição com máscara em tons de cinza: branco mantém o pixel da imagem;
+    preto substitui por preto sólido (valores intermediários fazem blend linear).
+    """
+    if image is None:
+        return None
+
+    path = Path(mask_path) if mask_path is not None else IMAGES_DIR / "bw.png"
+    try:
+        mask_img = Image.open(path)
+    except OSError as e:
+        print(f"Erro ao abrir máscara {path}: {e}")
+        return None
+
+    base = image.convert("RGB")
+    w, h = base.size
+    total = w * h
+    mask_L = mask_img.convert("L").resize(base.size, Image.Resampling.NEAREST)
+    black = Image.new("RGB", base.size, (0, 0, 0))
+    out = Image.composite(base, black, mask_L)
+
+    if on_progress:
+        on_progress(total, total)
+
+    return out
