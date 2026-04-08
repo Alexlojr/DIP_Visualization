@@ -212,7 +212,10 @@ def gamma_correction(image, gamma=1.0, on_progress=None):
 def apply_bw_mask(image, mask_path=None, on_progress=None):
     """
     Composição com máscara em tons de cinza: branco mantém o pixel da imagem;
-    preto substitui por preto sólido (valores intermediários fazem blend linear).
+    preto substitui por preto sólido (valores intermediários: produto por m/255).
+
+    Implementação explícita: luminância da máscara (BT.601), redimensionamento
+    nearest-neighbor por aritmética inteira, blend pixel a pixel — sem composite/resize.
     """
     if image is None:
         return None
@@ -227,11 +230,32 @@ def apply_bw_mask(image, mask_path=None, on_progress=None):
     base = image.convert("RGB")
     w, h = base.size
     total = w * h
-    mask_L = mask_img.convert("L").resize(base.size, Image.Resampling.NEAREST)
-    black = Image.new("RGB", base.size, (0, 0, 0))
-    out = Image.composite(base, black, mask_L)
+    bp = base.load()
 
-    if on_progress:
-        on_progress(total, total)
+    mask_rgb = mask_img.convert("RGB")
+    mw, mh = mask_rgb.size
+    mp = mask_rgb.load()
+    # Máscara em cinza por luminância (mesmo peso que o restante do módulo)
+    mask_vals = [0] * (mw * mh)
+    i = 0
+    for my in range(mh):
+        for mx in range(mw):
+            r, g, b = mp[mx, my]
+            mask_vals[i] = int(0.299 * r + 0.587 * g + 0.114 * b)
+            i += 1
 
-    return out
+    new_img = Image.new("RGB", (w, h))
+    npix = new_img.load()
+
+    for x in range(w):
+        # Nearest-neighbor: (x,y) na saída → índice na máscara mw×mh
+        sx = (x * mw) // w if w else 0
+        for y in range(h):
+            sy = (y * mh) // h if h else 0
+            m = mask_vals[sy * mw + sx]
+            r, g, b = bp[x, y]
+            npix[x, y] = (r * m // 255, g * m // 255, b * m // 255)
+        if on_progress:
+            on_progress((x + 1) * h, total)
+
+    return new_img
