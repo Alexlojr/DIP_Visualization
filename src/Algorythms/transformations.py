@@ -144,35 +144,62 @@ def flip_vertical(image, on_progress=None):
 
 def ascii_art_filter(image, block_size=8, on_progress=None):
     """
-    Filtro Arte ASCII — sem numpy/opencv.
+    Filtro Arte ASCII com detecção de bordas — sem numpy/opencv.
 
-    Divide a imagem em blocos de block_size×block_size pixels.
-    Para cada bloco calcula o brilho médio e mapeia a um caractere da
-    rampa ASCII: área clara → espaço, área escura → char denso (padrão
-    clássico — fundo branco, texto escuro).
+    Pipeline:
+      1. Aplica Sobel (detecção de bordas) na imagem em escala de cinza
+      2. Divide o resultado em blocos de block_size × block_size pixels
+      3. Calcula a intensidade média de borda de cada bloco
+      4. Mapeia a um caractere ASCII proporcional à intensidade
+
+    O tamanho da fonte é proporcional ao block_size para manter a
+    relação visual correta — blocos maiores = caracteres maiores.
 
     block_size: tamanho do bloco em pixels (4–32).
     """
     if image is None:
         return None
 
+    import math
     from PIL import ImageDraw, ImageFont
 
-    # Rampa do MAIS DENSO ao MAIS ESPARSO — fonte escura sobre fundo branco.
-    # Pixel escuro (0) → índice 0 (@), pixel claro (255) → índice -1 (espaço).
-    ASCII_RAMP = "@%#&BWM8RD$0GAONHQK5b69hkdpqwmXYZEFPST43C72aefgjnorsuvxyz1ltic!?><;:^~-_,.'` "
+    # --- Passo 1: Sobel manual (detecção de bordas) ---
+    gray_img = image.convert("L")
+    W, H = gray_img.size
+    gray_px = gray_img.load()
+    total_px = W * H
 
-    img = image.convert("L")
-    W, H = img.size
-    pixels = img.load()
+    Gx = [[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]]
+    Gy = [[-1, -2, -1], [0, 0, 0], [1, 2, 1]]
+
+    # Armazena magnitude das bordas em lista plana
+    edge_data = [0] * (W * H)
+    for x in range(1, W - 1):
+        for y in range(1, H - 1):
+            gx = gy = 0
+            for i in range(3):
+                for j in range(3):
+                    px_val = gray_px[x + j - 1, y + i - 1]
+                    gx += Gx[i][j] * px_val
+                    gy += Gy[i][j] * px_val
+            edge_data[y * W + x] = min(255, int(math.sqrt(gx * gx + gy * gy)))
+        if on_progress:
+            on_progress(int((x / W) * total_px * 0.4), total_px)
+
+    # --- Passo 2: Configuração dos blocos e fonte proporcional ---
+    # Rampa do MAIS DENSO ao MAIS ESPARSO
+    # Borda forte → char denso (@), borda fraca → espaço
+    ASCII_RAMP = "@%#&BWM8RD$0GAONHQK5b69hkdpqwmXYZEFPST43C72aefgjnorsuvxyz1ltic!?><;:^~-_,.'` "
+    ramp_len = len(ASCII_RAMP)
 
     bs = max(2, block_size)
     cols = max(1, W // bs)
     rows = max(1, H // bs)
-    total_px = W * H          # mesmo denominador que os outros filtros usam
-    ramp_len = len(ASCII_RAMP)
 
-    # Tenta carregar fonte monoespaçada do tamanho do bloco
+    # Fonte proporcional ao block_size — mantém relação visual
+    # Caracteres monoespaçados são ~60% mais largos que altos,
+    # então ajustamos o tamanho da fonte para que a altura ≈ bs
+    font_size = max(4, bs)
     font = None
     for path in [
         "C:/Windows/Fonts/consola.ttf",
@@ -181,28 +208,29 @@ def ascii_art_filter(image, block_size=8, on_progress=None):
         "/System/Library/Fonts/Menlo.ttc",
     ]:
         try:
-            font = ImageFont.truetype(path, bs)
+            font = ImageFont.truetype(path, font_size)
             break
         except Exception:
             continue
     if font is None:
         font = ImageFont.load_default()
 
-    # Mede a célula real do caractere para evitar sobreposição
+    # Mede a célula real do caractere para layout proporcional
     try:
         bbox = font.getbbox("@")
         cell_w = max(1, bbox[2] - bbox[0])
         cell_h = max(1, bbox[3] - bbox[1])
     except Exception:
-        cell_w = cell_h = bs
+        cell_w = int(font_size * 0.6)
+        cell_h = font_size
 
-    # Dimensão de saída: cada bloco de amostra gera uma célula de texto
+    # --- Passo 3: Renderização ---
     out_w = cols * cell_w
     out_h = rows * cell_h
-    out = Image.new("RGB", (out_w, out_h), (255, 255, 255))   # fundo branco
+    out = Image.new("RGB", (out_w, out_h), (0, 0, 0))  # fundo preto (bordas são claras)
     draw = ImageDraw.Draw(out)
 
-    done_px = 0
+    done_px = int(total_px * 0.4)
     for row in range(rows):
         y0 = row * bs
         y1 = min(y0 + bs, H)
@@ -210,28 +238,29 @@ def ascii_art_filter(image, block_size=8, on_progress=None):
             x0 = col * bs
             x1 = min(x0 + bs, W)
 
-            # Brilho médio do bloco (loop puro, sem numpy)
-            total_lum = 0
+            # Intensidade média de borda do bloco
+            total_edge = 0
             count = 0
             for py in range(y0, y1):
                 for px in range(x0, x1):
-                    total_lum += pixels[px, py]
+                    total_edge += edge_data[py * W + px]
                     count += 1
-            avg = total_lum // count if count else 0
+            avg = total_edge // count if count else 0
 
-            # Escuro (0) → char denso; claro (255) → espaço
-            char = ASCII_RAMP[int((255 - avg) / 255 * (ramp_len - 1))]
+            # Borda forte (255) → char denso; borda fraca (0) → espaço
+            idx = int(avg / 255 * (ramp_len - 1))
+            char = ASCII_RAMP[idx]
 
-            # Renderiza com tom de cinza correspondente ao original
-            gray = avg // 3          # chars nunca ficam totalmente brancos
+            # Intensidade do caractere proporcional à borda
+            brightness = min(255, avg + 40)
             draw.text((col * cell_w, row * cell_h), char,
-                      fill=(gray, gray, gray), font=font)
+                      fill=(brightness, brightness, brightness), font=font)
 
             done_px += bs * bs
             if on_progress:
                 on_progress(min(done_px, total_px), total_px)
 
-    # Redimensiona para as dimensões originais mantendo os chars visíveis
+    # Redimensiona para dimensões originais
     if (out_w, out_h) != (W, H):
         out = out.resize((W, H), Image.NEAREST)
 
@@ -294,95 +323,7 @@ def heatmap_filter(image, on_progress=None):
     return out
 
 
-def glitch_filter(image, intensity=8, on_progress=None):
-    """
-    Efeito Glitch — sem numpy/opencv.
 
-    Combina quatro camadas de corrupção de sinal digital:
-      1. Aberração cromática por linha (R e B deslocados opostamente)
-      2. Block tears — blocos horizontais inteiros deslocados drasticamente
-      3. Scanlines corrompidas — linhas com cores invertidas
-      4. Offset global do canal R (desalinhamento de sinal persistente)
-
-    intensity (1–30): controla intensidade de todos os efeitos.
-    """
-    if image is None:
-        return None
-
-    import random
-    rng = random.Random(intensity * 31337)   # seed determinístico por intensidade
-
-    img = image.convert("RGB")
-    W, H = img.size
-    raw = list(img.getdata())
-    total = W * H
-
-    r_ch = [p[0] for p in raw]
-    g_ch = [p[1] for p in raw]
-    b_ch = [p[2] for p in raw]
-
-    prob      = intensity / 30.0
-    max_shift = max(2, int(W * prob * 0.5))
-
-    # --- 1. Aberração cromática linha a linha ---
-    for y in range(H):
-        if rng.random() < prob * 0.8:
-            rs = y * W
-            sr = rng.randint(2, max_shift) % W
-            sb = rng.randint(2, max_shift) % W
-
-            row = r_ch[rs:rs + W]
-            r_ch[rs:rs + W] = row[W - sr:] + row[:W - sr]
-
-            row = b_ch[rs:rs + W]
-            b_ch[rs:rs + W] = row[sb:] + row[:sb]
-
-        if on_progress and y % 30 == 0:
-            on_progress(int((y / H) * total * 0.4), total)
-
-    # --- 2. Block tears — blocos deslocados com shift grande ---
-    n_tears = max(2, int(intensity * 0.7))
-    for _ in range(n_tears):
-        y0     = rng.randint(0, H - 1)
-        bh     = rng.randint(3, max(4, H // 6))
-        shift  = rng.randint(W // 5, W // 2) * rng.choice([-1, 1])
-        s      = shift % W
-        for y in range(y0, min(y0 + bh, H)):
-            rs = y * W
-            for ch in (r_ch, g_ch, b_ch):
-                row = ch[rs:rs + W]
-                ch[rs:rs + W] = row[W - s:] + row[:W - s]
-
-    if on_progress:
-        on_progress(int(total * 0.6), total)
-
-    # --- 3. Scanlines corrompidas — inverte cor de linhas aleatórias ---
-    n_corrupt = max(1, intensity // 4)
-    for _ in range(n_corrupt):
-        y  = rng.randint(0, H - 1)
-        rs = y * W
-        for x in range(W):
-            i = rs + x
-            r_ch[i] = 255 - r_ch[i]
-            g_ch[i] = 255 - g_ch[i]
-            b_ch[i] = 255 - b_ch[i]
-
-    if on_progress:
-        on_progress(int(total * 0.8), total)
-
-    # --- 4. Offset global do canal R (desalinhamento de sinal persistente) ---
-    global_s = max(1, int(W * prob * 0.06)) % W
-    for y in range(H):
-        rs = y * W
-        row = r_ch[rs:rs + W]
-        r_ch[rs:rs + W] = row[W - global_s:] + row[:W - global_s]
-
-    out_pixels = list(zip(r_ch, g_ch, b_ch))
-    out = Image.new("RGB", (W, H))
-    out.putdata(out_pixels)
-    if on_progress:
-        on_progress(total, total)
-    return out
 
 
 def dither_floyd_steinberg(image, levels=2, on_progress=None):

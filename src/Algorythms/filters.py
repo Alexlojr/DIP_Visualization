@@ -136,7 +136,8 @@ def sobel_filter(image, on_progress=None):
             gx = gy = 0
             for i in range(3):
                 for j in range(3):
-                    px = pixels[x - 1 + i, y - 1 + j]
+                    # kernel row i -> y offset (i - 1), col j -> x offset (j - 1)
+                    px = pixels[x + j - 1, y + i - 1]
                     gx += Gx[i][j] * px; gy += Gy[i][j] * px
             new_pixels[x, y] = min(255, int(math.sqrt(gx * gx + gy * gy)))
         if on_progress:
@@ -146,26 +147,54 @@ def sobel_filter(image, on_progress=None):
 
 
 def laplacian_filter(image, on_progress=None):
-    """Filtro Laplaciano — realça bordas usando derivada segunda da intensidade"""
+    """Laplacian edge response: |∇²I|, scaled to 0-255 for visibility; output RGB."""
     if image is None: return None
 
     img = image.convert("L")
     width, height = img.size
-    new_img = Image.new("L", (width, height))
     pixels = img.load()
-    new_pixels = new_img.load()
     kernel = [[0, 1, 0], [1, -4, 1], [0, 1, 0]]
-    total = (width - 2) * (height - 2)
+    total = width * height
 
+    # Collect |response|; raw values are often small on natural images and look black if not scaled
+    magnitudes: list[int] = []
     for x in range(1, width - 1):
         for y in range(1, height - 1):
             val = 0
             for i in range(3):
                 for j in range(3):
-                    val += kernel[i][j] * pixels[x - 1 + i, y - 1 + j]
-            new_pixels[x, y] = min(255, max(0, abs(val)))
+                    val += kernel[i][j] * pixels[x + j - 1, y + i - 1]
+            magnitudes.append(abs(val))
         if on_progress:
-            on_progress((x) * (height - 2), total)
+            on_progress((x + 1) * height, total)
+
+    mx = max(magnitudes) if magnitudes else 0
+
+    new_img = Image.new("RGB", (width, height))
+    new_pixels = new_img.load()
+    k = 0
+    if mx == 0:
+        # Uniform or perfectly linear regions give ~0 Laplacian; avoid an all-black preview
+        fill = (128, 128, 128)
+        for x in range(1, width - 1):
+            for y in range(1, height - 1):
+                new_pixels[x, y] = fill
+    else:
+        for x in range(1, width - 1):
+            for y in range(1, height - 1):
+                v = min(255, magnitudes[k] * 255 // mx)
+                new_pixels[x, y] = (v, v, v)
+                k += 1
+
+    if on_progress:
+        on_progress(total, total)
+
+    for x in range(width):
+        new_pixels[x, 0] = (0, 0, 0)
+        new_pixels[x, height - 1] = (0, 0, 0)
+    for y in range(height):
+        new_pixels[0, y] = (0, 0, 0)
+        new_pixels[width - 1, y] = (0, 0, 0)
 
     return new_img
 
@@ -188,7 +217,7 @@ def prewitt_filter(image, on_progress=None):
             gx = gy = 0
             for i in range(3):
                 for j in range(3):
-                    px = pixels[x - 1 + i, y - 1 + j]
+                    px = pixels[x + j - 1, y + i - 1]
                     gx += Gx[i][j] * px; gy += Gy[i][j] * px
             new_pixels[x, y] = min(255, int(math.sqrt(gx * gx + gy * gy)))
         if on_progress:
@@ -214,7 +243,7 @@ def sharpen_filter(image, on_progress=None):
             r_val = g_val = b_val = 0
             for i in range(3):
                 for j in range(3):
-                    r, g, b = pixels[x - 1 + i, y - 1 + j]
+                    r, g, b = pixels[x + j - 1, y + i - 1]
                     k = kernel[i][j]
                     r_val += k * r; g_val += k * g; b_val += k * b
             new_pixels[x, y] = (
@@ -363,3 +392,199 @@ def kuwahara_filter(image, kernel_size=5, on_progress=None):
             on_progress((x + 1) * height, total)
 
     return new_img
+
+
+# ---------------------------------------------------------------------------
+# Filtro Bilateral (Passa Baixa — preserva bordas)
+# ---------------------------------------------------------------------------
+
+def bilateral_filter(image, kernel_size=5, sigma_space=None, sigma_intensity=30, on_progress=None):
+    """
+    Filtro Bilateral — suavização que preserva bordas.
+
+    Diferente dos filtros lineares (média, gaussiano), o bilateral pondera
+    cada vizinho por DOIS fatores:
+      1. Proximidade espacial (como o gaussiano)
+      2. Similaridade de intensidade (pixels com cor parecida pesam mais)
+
+    Resultado: regiões homogêneas ficam suaves, mas bordas abruptas
+    (onde a intensidade muda muito) são preservadas.
+
+    Muito usado em: denoising de fotos, pré-processamento para segmentação,
+    e efeito de "pele suave" em retratos.
+
+    kernel_size (ímpar ≥ 3): tamanho da janela.
+    sigma_intensity (1–100): tolerância de diferença de cor.
+    """
+    if image is None:
+        return None
+    if kernel_size % 2 == 0:
+        kernel_size += 1
+
+    img = image.convert("RGB")
+    width, height = img.size
+    new_img = Image.new("RGB", (width, height))
+    pixels = img.load()
+    new_pixels = new_img.load()
+    half = kernel_size // 2
+    total = width * height
+
+    # sigma_space default: proporcional ao kernel
+    if sigma_space is None:
+        sigma_space = kernel_size / 3.0
+
+    ss2 = 2.0 * sigma_space * sigma_space
+    si2 = 2.0 * sigma_intensity * sigma_intensity
+
+    for x in range(width):
+        for y in range(height):
+            r0, g0, b0 = pixels[x, y]
+
+            r_sum = g_sum = b_sum = 0.0
+            w_sum = 0.0
+
+            for i in range(x - half, x + half + 1):
+                for j in range(y - half, y + half + 1):
+                    if 0 <= i < width and 0 <= j < height:
+                        r, g, b = pixels[i, j]
+
+                        # Peso espacial (distância geométrica)
+                        dx = i - x
+                        dy = j - y
+                        w_space = math.exp(-(dx * dx + dy * dy) / ss2)
+
+                        # Peso de intensidade (diferença de cor)
+                        dr = r - r0
+                        dg = g - g0
+                        db = b - b0
+                        diff2 = dr * dr + dg * dg + db * db
+                        w_intensity = math.exp(-diff2 / si2)
+
+                        w = w_space * w_intensity
+                        r_sum += r * w
+                        g_sum += g * w
+                        b_sum += b * w
+                        w_sum += w
+
+            if w_sum > 0:
+                new_pixels[x, y] = (
+                    int(r_sum / w_sum),
+                    int(g_sum / w_sum),
+                    int(b_sum / w_sum),
+                )
+            else:
+                new_pixels[x, y] = (r0, g0, b0)
+
+        if on_progress:
+            on_progress((x + 1) * height, total)
+
+    return new_img
+
+
+# ---------------------------------------------------------------------------
+# Roberts Cross (Passa Alta — detecção de bordas 2×2)
+# ---------------------------------------------------------------------------
+
+def roberts_cross_filter(image, on_progress=None):
+    """
+    Filtro Roberts Cross — detecção de bordas com kernel 2×2.
+
+    Um dos operadores de borda mais antigos e simples. Usa dois kernels
+    2×2 cruzados em diagonal:
+
+        Gx = [[1,  0],     Gy = [[ 0, 1],
+              [0, -1]]           [-1, 0]]
+
+    Magnitude: |G| = sqrt(Gx² + Gy²)
+
+    Vantagem sobre Sobel/Prewitt: resposta mais fina (bordas de 1px),
+    detecta melhor bordas diagonais. Desvantagem: mais sensível a ruído.
+    """
+    if image is None:
+        return None
+
+    img = image.convert("L")
+    width, height = img.size
+    new_img = Image.new("L", (width, height))
+    pixels = img.load()
+    new_pixels = new_img.load()
+    total = (width - 1) * (height - 1)
+
+    for x in range(width - 1):
+        for y in range(height - 1):
+            # Gx = p(x,y) - p(x+1,y+1)
+            gx = pixels[x, y] - pixels[x + 1, y + 1]
+            # Gy = p(x+1,y) - p(x,y+1)
+            gy = pixels[x + 1, y] - pixels[x, y + 1]
+
+            new_pixels[x, y] = min(255, int(math.sqrt(gx * gx + gy * gy)))
+
+        if on_progress:
+            on_progress((x + 1) * (height - 1), total)
+
+    return new_img
+
+
+# ---------------------------------------------------------------------------
+# Emboss (Passa Alta — relevo 3D)
+# ---------------------------------------------------------------------------
+
+def emboss_filter(image, on_progress=None):
+    """
+    Filtro Emboss (Relevo) — cria efeito de relevo 3D.
+
+    Usa um kernel direcional que realça a transição de escuro→claro
+    na diagonal superior-esquerda → inferior-direita, simulando uma
+    fonte de luz vinda do canto superior esquerdo:
+
+        [[-2, -1, 0],
+         [-1,  1, 1],
+         [ 0,  1, 2]]
+
+    O resultado é somado a 128 (cinza médio) para que regiões planas
+    fiquem cinza neutro, bordas "iluminadas" fiquem claras e bordas
+    "sombreadas" fiquem escuras.
+    """
+    if image is None:
+        return None
+
+    img = image.convert("RGB")
+    width, height = img.size
+    new_img = Image.new("RGB", (width, height))
+    pixels = img.load()
+    new_pixels = new_img.load()
+    total = (width - 2) * (height - 2)
+
+    kernel = [[-2, -1, 0],
+              [-1,  1, 1],
+              [ 0,  1, 2]]
+
+    for x in range(1, width - 1):
+        for y in range(1, height - 1):
+            r_val = g_val = b_val = 0
+            for i in range(3):
+                for j in range(3):
+                    r, g, b = pixels[x + j - 1, y + i - 1]
+                    k = kernel[i][j]
+                    r_val += k * r
+                    g_val += k * g
+                    b_val += k * b
+            # Offset de 128 para que áreas planas fiquem cinza neutro
+            new_pixels[x, y] = (
+                min(255, max(0, r_val + 128)),
+                min(255, max(0, g_val + 128)),
+                min(255, max(0, b_val + 128)),
+            )
+        if on_progress:
+            on_progress((x) * (height - 2), total)
+
+    # Bordas: copia pixels originais
+    for x in range(width):
+        new_pixels[x, 0] = pixels[x, 0]
+        new_pixels[x, height - 1] = pixels[x, height - 1]
+    for y in range(height):
+        new_pixels[0, y] = pixels[0, y]
+        new_pixels[width - 1, y] = pixels[width - 1, y]
+
+    return new_img
+
